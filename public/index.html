@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SURI — Online 2v2</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+<header><div class="logo">SURI<span>•</span></div><div class="sub">ONLINE 2V2</div></header>
+
+<section id="lobby" class="panel">
+  <h1>Play Suri Online</h1>
+  <p>4 players • 2 vs 2 • 52 cards • 13 cards each</p>
+  <input id="name" placeholder="Your name" maxlength="18">
+  <div class="row">
+    <button id="create">Create Room</button>
+    <input id="room" placeholder="ROOM CODE" maxlength="5">
+    <button id="join">Join</button>
+  </div>
+  <div id="roomInfo"></div>
+  <button id="start" class="hidden">Start Game</button>
+  <div id="err"></div>
+</section>
+
+<section id="game" class="hidden">
+  <div class="topbar">
+    <div><b>Room:</b> <span id="roomCode"></span></div>
+    <div class="scores"><span>TEAM 1 <b id="s0">0</b></span><span>TEAM 2 <b id="s1">0</b></span></div>
+  </div>
+  <div class="table">
+    <div class="player p0" id="p0"></div>
+    <div class="player p1" id="p1"></div>
+    <div class="player p2" id="p2"></div>
+    <div class="player p3" id="p3"></div>
+    <div class="center">
+      <div id="bidBox"></div>
+      <div class="trick" id="trick"></div>
+      <div id="status"></div>
+    </div>
+  </div>
+  <div class="handWrap"><h3>Your Cards</h3><div id="hand" class="hand"></div></div>
+  <div id="controls"></div>
+  <div class="history"><h3>Round History</h3><div id="hist"></div></div>
+</section>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

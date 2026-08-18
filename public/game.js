@@ -230,15 +230,59 @@ function render() {
 
   /* BID */
 
-  $("bidBox").innerHTML =
-    state.bid
-      ? `
-        <div>
-          <b>Bid: ${state.bid}</b>
-          · Rang: ${state.trump}
-        </div>
-      `
-      : "";
+  $("bidBox").innerHTML = `
+  <div class="scoreInfo">
+
+    <div class="teamScore">
+      <b>TEAM 1</b>
+      <div>Bid: ${state.bid || "-"}</div>
+      <div>Sar: ${state.tricks[0]}</div>
+
+      ${
+        state.bid
+          ? state.tricks[0] < state.bid
+            ? `<div class="short">
+                ${state.bid - state.tricks[0]} Sar Kam
+              </div>`
+            : `<div class="extra">
+                ${state.tricks[0] - state.bid} Sar Extra
+              </div>`
+          : ""
+      }
+    </div>
+
+    <div class="teamScore">
+      <b>TEAM 2</b>
+      <div>Bid: ${
+        state.bidder !== null &&
+        state.bidder % 2 === 1
+          ? state.bid
+          : "-"
+      }</div>
+
+      <div>Sar: ${state.tricks[1]}</div>
+
+      ${
+        state.bid &&
+        state.bidder !== null &&
+        state.bidder % 2 === 1
+          ? state.tricks[1] < state.bid
+            ? `<div class="short">
+                ${state.bid - state.tricks[1]} Sar Kam
+              </div>`
+            : `<div class="extra">
+                ${state.tricks[1] - state.bid} Sar Extra
+              </div>`
+          : ""
+      }
+    </div>
+
+    <div class="trumpInfo">
+      Rang: <b>${state.trump || "-"}</b>
+    </div>
+
+  </div>
+`;
 
   /* TRICK */
 
@@ -250,40 +294,51 @@ function render() {
       </div>
     `).join("");
 
+  
+
   /* CURRENT PLAYER */
 
-  const current =
-    state.players[state.current];
+const current =
+  state.players[state.current];
 
-  let message = "";
+let message = "";
 
-  if (state.phase === "bid") {
+if (state.phase === "lobby") {
 
-    if (current?.id === socket.id) {
-      message = "Your turn — choose bid";
-    } else {
-      message =
-        "Waiting for " +
-        (current?.name || "player");
-    }
-
-  } else if (state.phase === "play") {
-
-    if (current?.id === socket.id) {
-      message = "Your turn — play a card";
-    } else {
-      message =
-        "Waiting for " +
-        (current?.name || "player");
-    }
-
-  } else if (state.phase === "finished") {
-
+  if (state.players.length < 4) {
     message =
-      `Team ${state.winner + 1} wins!`;
+      `Waiting for players... (${state.players.length}/4)`;
+  } else {
+    message = "All 4 players joined!";
   }
 
-  $("status").textContent = message;
+} else if (state.phase === "bid") {
+
+  if (current?.id === socket.id) {
+    message =
+      `🎯 ${current.name}'s Turn — Choose Bid`;
+  } else {
+    message =
+      `⏳ Waiting for ${current?.name || "Player"}...`;
+  }
+
+} else if (state.phase === "play") {
+
+  if (current?.id === socket.id) {
+    message =
+      `🎯 ${current.name}'s Turn — Play a Card`;
+  } else {
+    message =
+      `⏳ Waiting for ${current?.name || "Player"}...`;
+  }
+
+} else if (state.phase === "finished") {
+
+  message =
+    `🏆 Team ${state.winner + 1} Wins!`;
+}
+
+$("status").textContent = message;
 
   /* HISTORY */
 
@@ -411,4 +466,120 @@ function chooseSuit(suit) {
 function restartGame() {
 
   socket.emit("restartRound");
+}
+
+/* =========================
+   CHAT
+========================= */
+
+const chatInput = $("chatInput");
+const chatSend = $("chatSend");
+const chatMessages = $("chatMessages");
+
+function sendChat() {
+  if (!chatInput) return;
+
+  const message = chatInput.value.trim();
+
+  if (!message) return;
+
+  socket.emit("chatMessage", {
+    message: message
+  });
+
+  chatInput.value = "";
+}
+
+if (chatSend) {
+  chatSend.onclick = sendChat;
+}
+
+if (chatInput) {
+  chatInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      sendChat();
+    }
+  });
+}
+
+socket.on("chatMessage", data => {
+
+  if (!chatMessages) return;
+
+  const div = document.createElement("div");
+
+  div.innerHTML =
+    `<b>${esc(data.name)}:</b> ${esc(data.message)}`;
+
+  chatMessages.appendChild(div);
+
+  chatMessages.scrollTop =
+    chatMessages.scrollHeight;
+});
+
+
+/* =========================
+   MICROPHONE
+========================= */
+
+let localStream = null;
+let micOn = false;
+
+const micBtn = $("micBtn");
+const voiceStatus = $("voiceStatus");
+
+if (micBtn) {
+
+  micBtn.onclick = async () => {
+
+    try {
+
+      if (!micOn) {
+
+        localStream =
+          await navigator.mediaDevices.getUserMedia({
+            audio: true
+          });
+
+        micOn = true;
+
+        micBtn.textContent = "🔴 Mic On";
+
+        if (voiceStatus) {
+          voiceStatus.textContent =
+            "Microphone is ON";
+        }
+
+      } else {
+
+        if (localStream) {
+          localStream
+            .getTracks()
+            .forEach(track => track.stop());
+        }
+
+        localStream = null;
+        micOn = false;
+
+        micBtn.textContent = "🎤 Mic Off";
+
+        if (voiceStatus) {
+          voiceStatus.textContent =
+            "Microphone is off";
+        }
+      }
+
+    } catch (err) {
+
+      console.error("MIC ERROR:", err);
+
+      if (voiceStatus) {
+        voiceStatus.textContent =
+          "Microphone permission denied";
+      }
+
+    }
+
+  };
+
 }

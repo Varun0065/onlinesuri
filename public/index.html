@@ -41,8 +41,50 @@
   </div>
   <div class="handWrap"><h3>Your Cards</h3><div id="hand" class="hand"></div></div>
   <div id="controls"></div>
-  <div class="history"><h3>Round History</h3><div id="hist"></div></div>
+  <div class="history">
+  <h3>Round History</h3>
+  <div id="hist"></div>
+</div>
+
+<!-- VOICE + CHAT -->
+<div class="communication">
+
+  <div class="voiceBox">
+    <h3>🎤 Voice Chat</h3>
+
+    <button id="micBtn" type="button">
+      🎤 Mic Off
+    </button>
+
+    <div id="voiceStatus">
+      Mic is off
+    </div>
+  </div>
+
+  <div class="chatBox">
+    <h3>💬 Chat</h3>
+
+    <div id="chatMessages"></div>
+
+    <div class="chatInput">
+      <input
+        id="chatInput"
+        type="text"
+        placeholder="Type a message..."
+        maxlength="200"
+      >
+
+      <button id="chatSend" type="button">
+        Send
+      </button>
+    </div>
+
+  </div>
+
+</div>
+
 </section>
+
 </div>
 <script src="/socket.io/socket.io.js"></script>
 <script src="game.js"></script>

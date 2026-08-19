@@ -24,10 +24,20 @@ function suitClass(s) {
    CREATE ROOM
 ========================= */
 
+/* =========================
+   CREATE ROOM
+========================= */
+
 $("create").onclick = () => {
+
   socket.emit("createRoom", {
-    name: $("name").value || "Player"
+
+    name: $("name").value || "Player",
+
+    game: $("gameSelect").value || "suri"
+
   });
+
 };
 
 /* =========================
@@ -74,6 +84,9 @@ socket.on("errorMsg", message => {
 socket.on("state", s => {
 
   state = s;
+  const game = s.game || "suri";
+
+console.log("SELECTED GAME:", game);
 
   $("lobby").classList.toggle(
     "hidden",
@@ -107,19 +120,40 @@ socket.on("state", s => {
 
   s.players.forEach((p, i) => {
 
-    const box = $("p" + i);
+  const box = $("p" + i);
 
-    if (!box) return;
+  if (!box) return;
 
-    box.innerHTML =
-      `${esc(p.name)} · Team ${p.team + 1}<br>
-       <small>${p.cardCount} cards</small>`;
+  let bidInfo = "";
 
-    box.classList.toggle(
-      "active",
-      s.current === i
-    );
-  });
+  if (
+    s.bid !== null &&
+    s.bidder === i
+  ) {
+    bidInfo = `
+      <div class="playerBidInfo">
+        <b>Rang: ${esc(s.trump || "-")}</b>
+        <br>
+        <b>Sar: ${s.bid}</b>
+      </div>
+    `;
+  }
+
+  box.innerHTML = `
+    <div class="playerName">
+      ${esc(p.name)} · Team ${p.team + 1}
+    </div>
+
+    <small>${p.cardCount} cards</small>
+
+    ${bidInfo}
+  `;
+
+  box.classList.toggle(
+    "active",
+    s.current === i
+  );
+});
 
   render();
 });
@@ -159,13 +193,47 @@ function cardHTML(card) {
   `;
 }
 
-// ==PLAY CARD==
+// ==PLAY CARD= //
 function playCard(cardId) {
-  console.log("Playing card:", cardId);
 
-  socket.emit("playCard", {
-    cardId: cardId
-  });
+  if (!state) return;
+
+  if (state.phase !== "play") {
+    return;
+  }
+
+  const current =
+    state.players[state.current];
+
+  if (!current) return;
+
+  if (current.id !== socket.id) {
+
+    $("status").textContent =
+      `⏳ Waiting for ${current.name}...`;
+
+    return;
+  }
+
+  if (!legal.includes(cardId)) {
+
+    $("err").textContent =
+      "You must follow the lead suit.";
+
+    return;
+  }
+
+  console.log(
+    "Playing card:",
+    cardId
+  );
+
+  socket.emit(
+    "playCard",
+    {
+      cardId: cardId
+    }
+  );
 }
 
 /* =========================
@@ -228,62 +296,14 @@ function render() {
 
   if (!state) return;
 
-  /* BID */
+  
 
-  $("bidBox").innerHTML = `
-  <div class="scoreInfo">
+  /* RANG + SAR */
 
-    <div class="teamScore">
-      <b>TEAM 1</b>
-      <div>Bid: ${state.bid || "-"}</div>
-      <div>Sar: ${state.tricks[0]}</div>
-
-      ${
-        state.bid
-          ? state.tricks[0] < state.bid
-            ? `<div class="short">
-                ${state.bid - state.tricks[0]} Sar Kam
-              </div>`
-            : `<div class="extra">
-                ${state.tricks[0] - state.bid} Sar Extra
-              </div>`
-          : ""
-      }
-    </div>
-
-    <div class="teamScore">
-      <b>TEAM 2</b>
-      <div>Bid: ${
-        state.bidder !== null &&
-        state.bidder % 2 === 1
-          ? state.bid
-          : "-"
-      }</div>
-
-      <div>Sar: ${state.tricks[1]}</div>
-
-      ${
-        state.bid &&
-        state.bidder !== null &&
-        state.bidder % 2 === 1
-          ? state.tricks[1] < state.bid
-            ? `<div class="short">
-                ${state.bid - state.tricks[1]} Sar Kam
-              </div>`
-            : `<div class="extra">
-                ${state.tricks[1] - state.bid} Sar Extra
-              </div>`
-          : ""
-      }
-    </div>
-
-    <div class="trumpInfo">
-      Rang: <b>${state.trump || "-"}</b>
-    </div>
-
-  </div>
-`;
-
+$("trumpInfo").innerHTML =
+  state.bid !== null
+    ? `<b>Rang: ${esc(state.trump || "-")} | Sar: ${state.bid}</b>`
+    : "";
   /* TRICK */
 
   $("trick").innerHTML =
@@ -309,33 +329,46 @@ if (state.phase === "lobby") {
     message =
       `Waiting for players... (${state.players.length}/4)`;
   } else {
-    message = "All 4 players joined!";
+    message =
+      "All 4 players joined!";
   }
 
 } else if (state.phase === "bid") {
 
-  if (current?.id === socket.id) {
+  const bidder =
+    state.players[state.bidTurn];
+
+  if (bidder?.id === socket.id) {
+
     message =
-      `🎯 ${current.name}'s Turn — Choose Bid`;
+      `🎯 ${bidder.name}'s Turn — Choose Sar + Rang`;
+
   } else {
+
     message =
-      `⏳ Waiting for ${current?.name || "Player"}...`;
+      `⏳ Waiting for ${bidder?.name || "Player"} to choose Sar + Rang`;
+
   }
 
 } else if (state.phase === "play") {
 
   if (current?.id === socket.id) {
+
     message =
-      `🎯 ${current.name}'s Turn — Play a Card`;
+      "🎯 Your Turn — Play Card";
+
   } else {
+
     message =
-      `⏳ Waiting for ${current?.name || "Player"}...`;
+      `⏳ Waiting for ${current?.name || "Player"} to play`;
+
   }
 
 } else if (state.phase === "finished") {
 
   message =
     `🏆 Team ${state.winner + 1} Wins!`;
+
 }
 
 $("status").textContent = message;
@@ -355,63 +388,75 @@ $("status").textContent = message;
    BID CONTROLS
 ========================= */
 
-let chosenSuit = "♠";
+let chosenSuit = null;
+let chosenBid = null;
 
 function renderControls() {
-
   const controls = $("controls");
 
   if (!controls) return;
 
   controls.innerHTML = "";
 
-  /* BID */
+  /* =========================
+     BID CONTROLS
+  ========================= */
 
   if (
     state.phase === "bid" &&
-    state.players[state.current]?.id === socket.id
+    state.players[state.bidTurn]?.id === socket.id
   ) {
 
     controls.innerHTML = `
       <div class="bidTitle">
-        Choose Bid + Rang
+        🎯 Choose Rang + Sir
+      </div>
+
+      <div class="bidTitle">
+        Rang:
       </div>
 
       <div class="bidControls">
+        ${["♠", "♥", "♦", "♣"].map(s => `
+          <button
+            type="button"
+            onclick="chooseSuit('${s}')">
+            ${s}
+          </button>
+        `).join("")}
+      </div>
 
-        ${[8, 9, 10, 11, 12, 13]
-          .map(n => `
-            <button
-              type="button"
-              onclick="makeBid(${n})">
-              ${n}
-            </button>
-          `)
-          .join("")}
-
+      <div class="bidTitle">
+        Sir:
       </div>
 
       <div class="bidControls">
-
-        ${["♠", "♥", "♦", "♣"]
-          .map(s => `
-            <button
-              type="button"
-              onclick="chooseSuit('${s}')">
-              ${s}
-            </button>
-          `)
-          .join("")}
-
+        ${[8, 9, 10, 11, 12, 13].map(n => `
+          <button
+            type="button"
+            onclick="chooseBid(${n})">
+            ${n}
+          </button>
+        `).join("")}
       </div>
 
       <div id="chosen">
-        Rang: ${chosenSuit}
+        Rang: - | Sir: -
       </div>
+
+      <button
+        type="button"
+        id="confirmBid"
+        onclick="confirmBid()"
+        disabled>
+        ✅ Confirm
+      </button>
     `;
   }
 
-  /* NEXT ROUND */
+  /* =========================
+     NEXT ROUND
+  ========================= */
 
   if (
     state.phase === "finished" &&
@@ -433,31 +478,45 @@ function renderControls() {
 /* =========================
    BID
 ========================= */
+function chooseBid(value) {
+  chosenBid = value;
+  updateBidDisplay();
+}
 
-function makeBid(value) {
+function chooseSuit(suit) {
+  chosenSuit = suit;
+  updateBidDisplay();
+}
+
+function updateBidDisplay() {
+  const chosen = $("chosen");
+  const confirm = $("confirmBid");
+
+  if (chosen) {
+    chosen.textContent =
+      `Rang: ${chosenSuit || "-"} | Sir: ${chosenBid || "-"}`;
+  }
+
+  if (confirm) {
+    confirm.disabled =
+      !(chosenSuit && chosenBid);
+  }
+}
+
+function confirmBid() {
+
+  if (!chosenSuit || !chosenBid) {
+    $("err").textContent =
+      "Pehle Rang aur Sir dono select karo.";
+    return;
+  }
 
   socket.emit("bid", {
-    value: value,
+    value: chosenBid,
     trump: chosenSuit
   });
 }
 
-/* =========================
-   CHOOSE TRUMP
-========================= */
-
-function chooseSuit(suit) {
-
-  chosenSuit = suit;
-
-  const chosen = $("chosen");
-
-  if (chosen) {
-
-    chosen.textContent =
-      `Rang selected: ${suit} · Now choose bid`;
-  }
-}
 
 /* =========================
    RESTART

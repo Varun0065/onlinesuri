@@ -156,7 +156,12 @@ console.log("SELECTED GAME:", game);
 });
 
   render();
+  if (micOn) {
+    startVoiceConnections();
+  }
 });
+
+
 
 /* =========================
    PRIVATE HAND
@@ -584,65 +589,402 @@ socket.on("chatMessage", data => {
 /* =========================
    MICROPHONE
 ========================= */
+/* =========================
+   VOICE CHAT - WEBRTC
+========================= */
 
 let localStream = null;
 let micOn = false;
 
+const peers = {};
 const micBtn = $("micBtn");
 const voiceStatus = $("voiceStatus");
+
+const rtcConfig = {
+  iceServers: [
+    {
+      urls: "stun:stun.l.google.com:19302"
+    }
+  ]
+};
+
+
+/* =========================
+   START MICROPHONE
+========================= */
+async function startMicrophone() {
+ 
+
+  try {
+
+    localStream =
+      await navigator.mediaDevices.getUserMedia({
+        audio: true
+      });
+
+    micOn = true;
+
+    if (micBtn) {
+      micBtn.textContent = "🔴 Mic On";
+    }
+
+    if (voiceStatus) {
+      voiceStatus.textContent =
+        "Microphone is ON";
+    }
+
+    startVoiceConnections();
+
+  } catch (err) {
+
+    console.error("MIC ERROR:", err);
+
+    if (voiceStatus) {
+      voiceStatus.textContent =
+        "Microphone permission denied";
+    }
+  }
+}
+
+
+/* =========================
+   STOP MICROPHONE
+========================= */
+
+function stopMicrophone() {
+
+  if (localStream) {
+
+    localStream
+      .getTracks()
+      .forEach(track => track.stop());
+
+    localStream = null;
+  }
+
+  micOn = false;
+
+  if (micBtn) {
+    micBtn.textContent = "🎤 Mic Off";
+  }
+
+  if (voiceStatus) {
+    voiceStatus.textContent =
+      "Microphone is OFF";
+  }
+}
+
+
+/* =========================
+   CREATE PEER
+========================= */
+
+function createPeer(playerId, initiator) {
+
+  if (peers[playerId]) {
+    return peers[playerId];
+  }
+
+  const pc =
+    new RTCPeerConnection(rtcConfig);
+
+  peers[playerId] = pc;
+
+
+  /* MIC TRACK */
+
+  if (localStream) {
+
+    localStream
+      .getTracks()
+      .forEach(track => {
+
+        pc.addTrack(
+          track,
+          localStream
+        );
+
+      });
+
+  }
+
+
+  /* REMOTE AUDIO */
+
+  pc.ontrack = event => {
+
+    let audio =
+      document.getElementById(
+        "audio-" + playerId
+      );
+
+    if (!audio) {
+
+      audio =
+        document.createElement("audio");
+
+      audio.id =
+        "audio-" + playerId;
+
+      audio.autoplay = true;
+
+      audio.playsInline = true;
+
+      document.body.appendChild(audio);
+    }
+
+    audio.srcObject =
+      event.streams[0];
+
+  };
+
+
+  /* ICE */
+
+  pc.onicecandidate = event => {
+
+    if (event.candidate) {
+
+      socket.emit(
+        "voice-ice-candidate",
+        {
+          to: playerId,
+          candidate:
+            event.candidate
+        }
+      );
+
+    }
+
+  };
+
+
+  /* OFFER */
+
+  if (initiator) {
+
+    pc.createOffer()
+      .then(offer => {
+
+        return pc.setLocalDescription(
+          offer
+        );
+
+      })
+      .then(() => {
+
+        socket.emit(
+          "voice-offer",
+          {
+            to: playerId,
+            offer:
+              pc.localDescription
+          }
+        );
+
+      })
+      .catch(err => {
+
+        console.error(
+          "OFFER ERROR:",
+          err
+        );
+
+      });
+
+  }
+
+
+  return pc;
+}
+
+
+/* =========================
+   START CONNECTIONS
+========================= */
+
+function startVoiceConnections() {
+
+  if (!state || !state.players) {
+    return;
+  }
+
+  state.players.forEach(player => {
+
+    if (
+      player.id !== socket.id &&
+      player.connected
+    ) {
+
+      /*
+       * Lower seat creates connection.
+       * This prevents duplicate connections.
+       */
+
+      const mySeat =
+        state.players.findIndex(
+          p => p.id === socket.id
+        );
+
+      const otherSeat =
+        state.players.findIndex(
+          p => p.id === player.id
+        );
+
+      createPeer(
+        player.id,
+        mySeat < otherSeat
+      );
+
+    }
+
+  });
+
+}
+
+
+/* =========================
+   RECEIVE OFFER
+========================= */
+
+socket.on(
+  "voice-offer",
+  async data => {
+
+    try {
+
+      const pc =
+        createPeer(
+          data.from,
+          false
+        );
+
+      await pc.setRemoteDescription(
+        new RTCSessionDescription(
+          data.offer
+        )
+      );
+
+      const answer =
+        await pc.createAnswer();
+
+      await pc.setLocalDescription(
+        answer
+      );
+
+      socket.emit(
+        "voice-answer",
+        {
+          to: data.from,
+          answer:
+            pc.localDescription
+        }
+      );
+
+    } catch (err) {
+
+      console.error(
+        "VOICE OFFER ERROR:",
+        err
+      );
+
+    }
+
+  }
+);
+
+
+/* =========================
+   RECEIVE ANSWER
+========================= */
+
+socket.on(
+  "voice-answer",
+  async data => {
+
+    try {
+
+      const pc =
+        peers[data.from];
+
+      if (!pc) {
+        return;
+      }
+
+      await pc.setRemoteDescription(
+        new RTCSessionDescription(
+          data.answer
+        )
+      );
+
+    } catch (err) {
+
+      console.error(
+        "VOICE ANSWER ERROR:",
+        err
+      );
+
+    }
+
+  }
+);
+
+
+/* =========================
+   RECEIVE ICE
+========================= */
+
+socket.on(
+  "voice-ice-candidate",
+  async data => {
+
+    try {
+
+      const pc =
+        peers[data.from];
+
+      if (!pc) {
+        return;
+      }
+
+      await pc.addIceCandidate(
+        new RTCIceCandidate(
+          data.candidate
+        )
+      );
+
+    } catch (err) {
+
+      console.error(
+        "ICE ERROR:",
+        err
+      );
+
+    }
+
+  }
+);
+
+
+/* =========================
+   MIC BUTTON
+========================= */
 
 if (micBtn) {
 
   micBtn.onclick = async () => {
 
-    try {
+    if (!micOn) {
 
-      if (!micOn) {
+      await startMicrophone();
 
-        localStream =
-          await navigator.mediaDevices.getUserMedia({
-            audio: true
-          });
+    } else {
 
-        micOn = true;
-
-        micBtn.textContent = "🔴 Mic On";
-
-        if (voiceStatus) {
-          voiceStatus.textContent =
-            "Microphone is ON";
-        }
-
-      } else {
-
-        if (localStream) {
-          localStream
-            .getTracks()
-            .forEach(track => track.stop());
-        }
-
-        localStream = null;
-        micOn = false;
-
-        micBtn.textContent = "🎤 Mic Off";
-
-        if (voiceStatus) {
-          voiceStatus.textContent =
-            "Microphone is off";
-        }
-      }
-
-    } catch (err) {
-
-      console.error("MIC ERROR:", err);
-
-      if (voiceStatus) {
-        voiceStatus.textContent =
-          "Microphone permission denied";
-      }
+      stopMicrophone();
 
     }
 
   };
 
 }
+

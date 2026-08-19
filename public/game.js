@@ -398,9 +398,13 @@ function renderControls() {
 
   controls.innerHTML = "";
 
-  /* =========================
-     BID CONTROLS
-  ========================= */
+  console.log(
+    "BID DEBUG:",
+    state.phase,
+    state.bidTurn,
+    socket.id,
+    state.players[state.bidTurn]?.id
+  );
 
   if (
     state.phase === "bid" &&
